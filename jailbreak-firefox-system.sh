@@ -1,36 +1,54 @@
-#!/bin/sh
-
+#!/bin/bash
 set -e
+set -o pipefail
 
-## Prepare
-echo '**** Preparing... ****'
+echo "**** Starting Firefox Snap extraction and patch ****"
 
-# Create Workdir
-rm -rf /tmp/jailbreak-firefox-system-workdir
-mkdir /tmp/jailbreak-firefox-system-workdir
-cd /tmp/jailbreak-firefox-system-workdir
+# Step 1: Get Firefox snap revision
+REV="$(snap list firefox | awk '/firefox/ {print $3}')"
+if [ -z "$REV" ]; then
+  echo "ERROR: Could not find Firefox snap revision."
+  exit 1
+fi
+echo "Firefox snap revision: $REV"
 
-## Modify
-echo '**** Modifying... ****'
+SNAP_FILE="/var/lib/snapd/snaps/firefox_${REV}.snap"
 
-# Extract omni.ja
-mkdir omni
-unzip -q /usr/lib/firefox/omni.ja -d omni || : # Ignore Errors
+if [ ! -f "$SNAP_FILE" ]; then
+  echo "ERROR: Snap file $SNAP_FILE does not exist."
+  exit 1
+fi
 
-# Patch AppConstants.jsm
-sed -i 's/MOZ_REQUIRE_SIGNING:.*/MOZ_REQUIRE_SIGNING: false, _old_require_signing:/' omni/modules/AppConstants.sys.mjs
+# Step 2: Prepare working directory
+WORKDIR="/tmp/firefox-unsquash"
+rm -rf "$WORKDIR"
+mkdir -p "$WORKDIR"
 
-# Repackage omni.ja
-sudo rm -f /usr/lib/firefox/omni.ja
-cd omni
-sudo zip -0DXqr /usr/lib/firefox/omni.ja . # Source: https://stackoverflow.com/a/68379534
-cd ../
+echo "Extracting snap..."
+unsquashfs -d "$WORKDIR" "$SNAP_FILE"
 
-## Finalize
-echo '**** Finalizing... ****'
+# Step 3: Extract omni.ja
+OMNI_DIR="$WORKDIR/usr/lib/firefox/omni"
+mkdir -p "$OMNI_DIR"
+unzip -q "$WORKDIR/usr/lib/firefox/omni.ja" -d "$OMNI_DIR"
 
-# Clean Up
-rm -rf /tmp/jailbreak-firefox-system-workdir
+# Step 4: Patch AppConstants.sys.mjs to disable signature requirement
+APPCONST="$OMNI_DIR/modules/AppConstants.sys.mjs"
 
-## Done
-echo '**** Done! ****'
+if [ ! -f "$APPCONST" ]; then
+  echo "ERROR: $APPCONST not found."
+  exit 1
+fi
+
+echo "Patching AppConstants.sys.mjs to disable MOZ_REQUIRE_SIGNING..."
+sed -i 's/MOZ_REQUIRE_SIGNING:.*/MOZ_REQUIRE_SIGNING: false, _old_require_signing:/' "$APPCONST"
+
+# Step 5: Repack omni.ja
+echo "Repacking omni.ja..."
+cd "$OMNI_DIR"
+zip -0DXqr ../omni.ja . 
+cd -
+
+# Step 6: Run Firefox from extracted folder
+echo "Running Firefox from extracted snap..."
+"$WORKDIR/usr/lib/firefox/firefox"
