@@ -29,15 +29,15 @@ unsquashfs -d snap "${FILE}"
 
 # Extract omni.ja
 mkdir omni
-unzip -q snap/snap/firefox/current/usr/lib/firefox/omni.ja -d omni || : # Ignore Errors
+unzip -q snap/firefox/current/usr/lib/firefox/omni.ja -d omni || : # Ignore Errors
 
 # Patch AppConstants.jsm
 sed -i 's/MOZ_REQUIRE_SIGNING:.*/MOZ_REQUIRE_SIGNING: false, _old_require_signing:/' omni/modules/AppConstants.sys.mjs
 
 # Repackage omni.ja
-rm -f snap/snap/firefox/current/usr/lib/firefox/omni.ja
+rm -f snap/firefox/current/usr/lib/firefox/omni.ja
 cd omni
-zip -0DXqr ../snap/snap/firefox/current/usr/lib/firefox/omni.ja . # Source: https://stackoverflow.com/a/68379534
+zip -0DXqr ../snap/firefox/current/usr/lib/firefox/omni.ja . # Source: https://stackoverflow.com/a/68379534
 cd ../
 
 # Rebuild Snap
